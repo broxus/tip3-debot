@@ -1,0 +1,266 @@
+{
+	"ABI version": 2,
+	"header": ["pubkey", "time", "expire"],
+	"functions": [
+		{
+			"name": "constructor",
+			"inputs": [
+				{"name":"debotAbi","type":"bytes"},
+				{"name":"_token_registry","type":"address"}
+			],
+			"outputs": [
+			]
+		},
+		{
+			"name": "getVersion",
+			"inputs": [
+			],
+			"outputs": [
+				{"name":"name","type":"bytes"},
+				{"name":"semver","type":"uint24"}
+			]
+		},
+		{
+			"name": "start",
+			"inputs": [
+			],
+			"outputs": [
+			]
+		},
+		{
+			"name": "getSenderWalletAddress",
+			"inputs": [
+				{"name":"value","type":"address"}
+			],
+			"outputs": [
+			]
+		},
+		{
+			"name": "showStartMenu",
+			"inputs": [
+			],
+			"outputs": [
+			]
+		},
+		{
+			"name": "backToMenu",
+			"inputs": [
+				{"name":"index","type":"uint32"}
+			],
+			"outputs": [
+			]
+		},
+		{
+			"name": "selectTip3Token",
+			"inputs": [
+				{"name":"index","type":"uint32"}
+			],
+			"outputs": [
+			]
+		},
+		{
+			"name": "showTokensMenu",
+			"inputs": [
+			],
+			"outputs": [
+			]
+		},
+		{
+			"name": "selectToken",
+			"inputs": [
+				{"name":"index","type":"uint32"}
+			],
+			"outputs": [
+			]
+		},
+		{
+			"name": "getAmountToSend",
+			"inputs": [
+			],
+			"outputs": [
+			]
+		},
+		{
+			"name": "show",
+			"inputs": [
+				{"name":"value","type":"uint128"}
+			],
+			"outputs": [
+			]
+		},
+		{
+			"name": "getInputAmount",
+			"inputs": [
+				{"name":"value","type":"bytes"}
+			],
+			"outputs": [
+			]
+		},
+		{
+			"name": "getReceiverAddress",
+			"inputs": [
+			],
+			"outputs": [
+			]
+		},
+		{
+			"name": "checkWalletAddressReceiver",
+			"inputs": [
+				{"name":"value","type":"address"}
+			],
+			"outputs": [
+			]
+		},
+		{
+			"name": "finalize",
+			"inputs": [
+			],
+			"outputs": [
+			]
+		},
+		{
+			"name": "submit",
+			"inputs": [
+				{"name":"value","type":"bool"}
+			],
+			"outputs": [
+			]
+		},
+		{
+			"name": "queryTokenRegistry",
+			"inputs": [
+			],
+			"outputs": [
+			]
+		},
+		{
+			"name": "queryTokenDetails",
+			"inputs": [
+				{"name":"token_id","type":"uint256"}
+			],
+			"outputs": [
+			]
+		},
+		{
+			"name": "queryTokenWalletAddress",
+			"inputs": [
+			],
+			"outputs": [
+			]
+		},
+		{
+			"name": "queryTokenWalletBalance",
+			"inputs": [
+			],
+			"outputs": [
+			]
+		},
+		{
+			"name": "setTokens",
+			"inputs": [
+				{"name":"_tokens","type":"address[]"}
+			],
+			"outputs": [
+			]
+		},
+		{
+			"name": "setTokenDetails",
+			"inputs": [
+				{"components":[{"name":"name","type":"bytes"},{"name":"symbol","type":"bytes"},{"name":"decimals","type":"uint8"},{"name":"wallet_code","type":"cell"},{"name":"root_public_key","type":"uint256"},{"name":"root_owner_address","type":"address"},{"name":"total_supply","type":"uint128"}],"name":"_token_details","type":"tuple"}
+			],
+			"outputs": [
+			]
+		},
+		{
+			"name": "setTokenWalletAddress",
+			"inputs": [
+				{"name":"_token_wallet_address","type":"address"}
+			],
+			"outputs": [
+			]
+		},
+		{
+			"name": "checkTokenWalletDeployed",
+			"inputs": [
+				{"name":"acc_type","type":"int8"}
+			],
+			"outputs": [
+			]
+		},
+		{
+			"name": "setTokenWalletBalance",
+			"inputs": [
+				{"name":"_balance","type":"uint128"}
+			],
+			"outputs": [
+			]
+		},
+		{
+			"name": "success",
+			"inputs": [
+				{"name":"res","type":"uint64"}
+			],
+			"outputs": [
+			]
+		},
+		{
+			"name": "onSendFailed",
+			"inputs": [
+				{"name":"sdkError","type":"uint32"},
+				{"name":"exitCode","type":"uint32"}
+			],
+			"outputs": [
+			]
+		},
+		{
+			"name": "transfer",
+			"inputs": [
+				{"name":"dest","type":"address"},
+				{"name":"value","type":"uint128"},
+				{"name":"bounce","type":"bool"},
+				{"name":"flags","type":"uint16"}
+			],
+			"outputs": [
+			]
+		},
+		{
+			"name": "upgrade",
+			"inputs": [
+				{"name":"state","type":"cell"}
+			],
+			"outputs": [
+			]
+		},
+		{
+			"name": "getDebotOptions",
+			"inputs": [
+			],
+			"outputs": [
+				{"name":"options","type":"uint8"},
+				{"name":"debotAbi","type":"bytes"},
+				{"name":"targetAbi","type":"bytes"},
+				{"name":"targetAddr","type":"address"}
+			]
+		},
+		{
+			"name": "setABI",
+			"inputs": [
+				{"name":"dabi","type":"bytes"}
+			],
+			"outputs": [
+			]
+		},
+		{
+			"name": "token_registry",
+			"inputs": [
+			],
+			"outputs": [
+				{"name":"token_registry","type":"address"}
+			]
+		}
+	],
+	"data": [
+	],
+	"events": [
+	]
+}

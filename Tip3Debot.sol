@@ -6,10 +6,12 @@ pragma AbiHeader pubkey;
 import "base/Debot.sol";
 import "base/Terminal.sol";
 import "base/AddressInput.sol";
+import "base/AmountInput.sol";
 import "base/Sdk.sol";
 import "base/Menu.sol";
 import "base/Upgradable.sol";
 import "base/Transferable.sol";
+import "base/ConfirmInput.sol";
 
 
 interface IRootToken {
@@ -21,8 +23,6 @@ interface IRootToken {
         uint256 root_public_key;
         address root_owner_address;
         uint128 total_supply;
-        uint128 start_gas_balance;
-        bool paused;
     }
 
     function name() external returns (bytes);
@@ -40,13 +40,16 @@ interface ITokenWallet {
         address recipient_address,
         uint128 tokens,
         uint128 deploy_grams,
-        uint128 transfer_grams
+        uint128 transfer_grams,
+        address send_gas_to,
+        bool notify_receiver,
+        TvmCell payload
     ) external;
 }
 
 interface IUserWallet {
     function submitTransaction(
-        address payable dest,
+        address dest,
         uint128 value,
         bool bounce,
         bool allBalance,
@@ -68,66 +71,58 @@ contract Tip3Debot is Debot, Upgradable, Transferable {
         uint256 root_public_key;
         address root_owner_address;
         uint128 total_supply;
-        uint128 start_gas_balance;
-        bool paused;
     }
 
     address public token_registry;
 
     address[] tokens_list;
     rootTokenContractDetails[] tokens_details;
-    uint256 cur_token_id;
     uint256 selected_token_id;
 
     // user data
     address wallet_address;
-    uint256 public_key;
-
-    address token_wallet_address;
+    address     token_wallet_address;
     uint128 token_wallet_balance;
 
+    // user input
     string str_amount_to_send;
     uint128 amount_to_send;
 
     // receiver
     address receiver_wallet_address;
-    uint256 receiver_public_key;
-
-
-    // token metadata
-    uint128 total_supply;
-    uint256 token_decimals;
-    bytes token_name;
-    bytes token_symbol;
 
     constructor(string debotAbi, address _token_registry) public {
-        require(tvm.pubkey() == msg.pubkey(), 100);
-        tvm.accept();
-        init(DEBOT_ABI, debotAbi, "", address(0));
+        setABI(debotAbi);
         token_registry = _token_registry;
     }
 
-    function getRequiredInterfaces() public returns (uint256[] interfaces) {
-        return [Menu.ID, Terminal.ID, AddressInput.ID];
-	}
+    function getVersion() public override returns (string name, uint24 semver) {
+        (name, semver) = ("Broxus Tip3 token Debot", 1 << 16);
+    }
 
     function start() public override {
-        Menu.select("Main menu", "Hello, i'm a broxus TIP3 debot. I can help you transfer your TIP3 tokens.", [
-            MenuItem("Select TIP3 token", "", tvm.functionId(selectTip3Token)),
-            MenuItem("Exit", "", 0)
+        Terminal.print(0, "Hello, I'm Broxus TIP3 debot. I can help you transfer your TIP3 tokens.");
+        AddressInput.get(tvm.functionId(getSenderWalletAddress), "Give me your wallet address to start");
+    }
+
+    function getSenderWalletAddress(address value) public {
+        wallet_address = value;
+        Terminal.print(0, "Thank you, now you can manage your tokens");
+        showStartMenu();
+    }
+
+    function showStartMenu() public {
+        Menu.select("Main menu", "", [
+            MenuItem("Select TIP3 token", "", tvm.functionId(selectTip3Token))
         ]);
     }
 
-    function fetch() public override returns (Context[] contexts) {}
-
-    function quit() public override {}
-
-    function getVersion() public override returns (string name, uint24 semver) {
-        (name, semver) = ("Tip3 token Debot", 1 << 16);
+    function backToMenu(uint32 index) public {
+        showStartMenu();
     }
 
+
     function selectTip3Token(uint32 index) public {
-        Terminal.print(0, "Querying token registry...");
         queryTokenRegistry();
 	}
 
@@ -139,7 +134,7 @@ contract Tip3Debot is Debot, Upgradable, Transferable {
             items.push(MenuItem(_details.symbol, "", tvm.functionId(selectToken)));
         }
 
-        items.push(MenuItem("Exit", "", 0));
+        items.push(MenuItem("Back", "", tvm.functionId(backToMenu)));
 
         Menu.select("Token menu", "Select token from list below:", items);
     }
@@ -148,81 +143,59 @@ contract Tip3Debot is Debot, Upgradable, Transferable {
         selected_token_id = index;
         rootTokenContractDetails _details = tokens_details[index];
 
-        Terminal.print(0, format("Name - {}\nDecimals - {}\nTotal supply - {}", _details.name, _details.decimals, _details.total_supply));
+        string str = format(
+            "Token info:\n\nName - {}\nDecimals - {}\nTotal supply - {}\nRoot address - {}",
+            _details.name,
+            _details.decimals,
+            _details.total_supply,
+            tokens_list[selected_token_id]
+        );
+        Terminal.print(0, str);
 
-        getSenderWalletAddress();
-    }
-
-    function getSenderWalletAddress() public {
-        Terminal.print(0, "Now enter your Surf wallet address");
-        AddressInput.select(tvm.functionId(checkSenderWalletAddress));
-    }
-
-    function checkSenderWalletAddress(address value) public {
-        wallet_address = value;
         queryTokenWalletAddress();
     }
 
     // called from queryTokenWalletBalance callback
     function getAmountToSend() public {
-        Terminal.inputStr(tvm.functionId(getInputAmount), "Enter amount you want to send. Example: 123 or 123.11", false);
+//        AmountInput.get(tvm.functionId(show), "Enter input value",  tokens_details[selected_token_id].decimals, 0,  tokens_details[selected_token_id].total_supply);
+
+        Terminal.input(tvm.functionId(getInputAmount), "Enter amount you want to send. Example: 123 or 123.11", false);
+    }
+
+    function show(uint128 value) public {
+        Terminal.print(0, format("Val - {}", value));
     }
 
     function getInputAmount(string value) public {
-        str_amount_to_send = value;
-        uint8 sep_id = findSeparator(value, ".");
+        bool status; uint8 decimals = tokens_details[selected_token_id].decimals;
+        (amount_to_send, status) = fromFractional(value, decimals);
 
-        uint256 result; bool status; uint8 decimals = tokens_details[selected_token_id].decimals;
-        if (sep_id == 0) {
-            // no separator found
-            (result, status) = stoi(value);
-            // add decimals
-            result = result * 10 ** uint256(decimals);
-        } else {
-            // found separator, add decimals to real and int parts and sum them
-            string str_real_part = value.substr(sep_id + 1, value.byteLength() - (sep_id + 1));
-            string str_int_part = value.substr(0, sep_id);
-
-            // convert int part
-            (uint256 int_part, bool st) = stoi(str_int_part);
-            // convert real part
-            uint256 real_part_with_decimals = parseRealPart(str_real_part);
-
-            result = int_part * 10 ** uint256(decimals) + real_part_with_decimals;
+        if (status == false) {
+            Terminal.input(tvm.functionId(getInputAmount), "Wrong input, please, try again", false);
+            return;
         }
 
-        amount_to_send = uint128(result);
+        str_amount_to_send = value;
+
         string str = format(
             "You entered {}, which is {} according to token decimals ({})",
             value, amount_to_send, decimals
         );
         Terminal.print(0, str);
 
-        getReceiverAddress();
-    }
-
-    function findSeparator(string str_num, string sep) internal returns (uint8 sep_id) {
-        for (uint8 i = 0; i < str_num.byteLength(); i++) {
-            if (str_num.substr(i, 1) == sep) {
-                sep_id = i;
-            }
+        if (amount_to_send > token_wallet_balance) {
+            Terminal.input(
+                tvm.functionId(getInputAmount),
+                format("Amount exceeds your balance ({}), please, enter less value", toFractional(token_wallet_balance, decimals)),
+                false
+            );
+        } else {
+            getReceiverAddress();
         }
     }
 
-    function parseRealPart(string real_part) internal returns (uint256) {
-        // lets day we got 1.0012 in token with 6 decimals, so that
-        // real_part -> 0012
-        // decimals  -> 6
-        uint8 decimals = tokens_details[selected_token_id].decimals;
-        uint8 power = uint8(decimals) - real_part.byteLength();
-        (uint256 result, bool st) = stoi(real_part);
-        // result = 12 * 10**2
-        return result * 10 ** uint256(power);
-    }
-
     function getReceiverAddress() public {
-        Terminal.print(0, "Now enter receiver wallet address");
-        AddressInput.select(tvm.functionId(checkWalletAddressReceiver));
+        AddressInput.get(tvm.functionId(checkWalletAddressReceiver), "Now enter receiver wallet address");
     }
 
     function checkWalletAddressReceiver(address value) public {
@@ -230,34 +203,37 @@ contract Tip3Debot is Debot, Upgradable, Transferable {
         finalize();
     }
 
-    function checkPublicKeyReceiver(string value) public {
-        (uint256 res, bool st) = stoi(value);
-
-        receiver_public_key = res;
-        finalize();
-    }
-
     function finalize() public {
-        string final_msg = format("You want to transfer {} ({}) {} tokens to ", str_amount_to_send, amount_to_send, token_symbol);
-        if (receiver_public_key > 0) {
-            final_msg.append(format("{}", receiver_public_key));
-        } else {
-            final_msg.append(format("{}", receiver_wallet_address));
-        }
+        string token_symbol = tokens_details[selected_token_id].symbol;
+        string final_msg = format(
+            "You want to transfer {} ({}) {} tokens to {}",
+            str_amount_to_send, amount_to_send, token_symbol, receiver_wallet_address
+        );
         Terminal.print(0, final_msg);
-
-        Terminal.inputBoolean(tvm.functionId(submit), "Submit transaction?");
+        ConfirmInput.get(tvm.functionId(submit), "Submit transaction?");
     }
 
     function submit(bool value) public {
         if (!value) {
-            Terminal.print(0, "Ok, maybe next time. Bye!");
+            Terminal.print(0, "Ok, let's do anything else");
+            showStartMenu();
             return;
         }
 
         optional(uint256) pubkey = 0;
 
-        TvmCell body = tvm.encodeBody(ITokenWallet.transferToRecipient, receiver_public_key, receiver_wallet_address, amount_to_send, uint128(50000000), uint128(0));
+        TvmBuilder builder;
+        TvmCell body = tvm.encodeBody(
+            ITokenWallet.transferToRecipient,
+            0,
+            receiver_wallet_address,
+            amount_to_send,
+            uint128(50000000),
+            uint128(0),
+            wallet_address,
+            false,
+            builder.toCell()
+        );
 
         IUserWallet(wallet_address).submitTransaction{
                 abiVer: 2,
@@ -267,7 +243,7 @@ contract Tip3Debot is Debot, Upgradable, Transferable {
                 time: uint64(now),
                 expire: 0,
                 callbackId: tvm.functionId(success),
-                onErrorId: 0
+                onErrorId: tvm.functionId(onSendFailed)
         }(token_wallet_address, uint128(500000000), true, false, body);
 
     }
@@ -288,7 +264,6 @@ contract Tip3Debot is Debot, Upgradable, Transferable {
     }
 
     function queryTokenDetails(uint256 token_id) public {
-        cur_token_id = token_id;
         address token_addr = tokens_list[token_id];
 
         optional(uint256) pubkey;
@@ -304,7 +279,6 @@ contract Tip3Debot is Debot, Upgradable, Transferable {
         }();
     }
 
-
     function queryTokenWalletAddress() public view {
         optional(uint256) pubkey;
         IRootToken(tokens_list[selected_token_id]).getWalletAddress{
@@ -316,7 +290,7 @@ contract Tip3Debot is Debot, Upgradable, Transferable {
             expire: 0,
             callbackId: tvm.functionId(setTokenWalletAddress),
             onErrorId: 0
-        }(public_key, wallet_address);
+        }(0, wallet_address);
     }
 
     function queryTokenWalletBalance() public view {
@@ -337,44 +311,114 @@ contract Tip3Debot is Debot, Upgradable, Transferable {
     // ---------------------------- CALLBACKS ---------------------------------
     function setTokens(address[] _tokens) public {
         tokens_list = _tokens;
+        delete tokens_details;
 
-        
-        queryTokenDetails(0);
+        for (uint i = 0; i < tokens_list.length; i++) {
+            queryTokenDetails(i);
+        }
+        Terminal.print(tvm.functionId(showTokensMenu), "");
     }
 
     function setTokenDetails(rootTokenContractDetails _token_details) public {
         tokens_details.push(_token_details);
-
-        if (cur_token_id == tokens_list.length - 1) {
-            // show menu
-            showTokensMenu();
-        } else {
-            queryTokenDetails(cur_token_id + 1);
-        }
     }
 
     function setTokenWalletAddress(address _token_wallet_address) public {
         token_wallet_address = _token_wallet_address;
-        string str = format("Your token wallet address - {}", token_wallet_address);
-        Terminal.print(0, str);
 
-        queryTokenWalletBalance();
+        Sdk.getAccountType(tvm.functionId(checkTokenWalletDeployed), token_wallet_address);
+    }
+
+    function checkTokenWalletDeployed(int8 acc_type) public {
+        if ((acc_type==-1)||(acc_type==0)) {
+            string symbol = tokens_details[selected_token_id].symbol;
+            Terminal.print(0, format("You don't have any {}, use another token", symbol));
+            showTokensMenu();
+        } else {
+            queryTokenWalletBalance();
+        }
     }
 
     function setTokenWalletBalance(uint128 _balance) public {
         token_wallet_balance = _balance;
-        uint left_part = token_wallet_balance / 10 ** tokens_details[selected_token_id].decimals;
-        uint right_part = token_wallet_balance % 10 ** tokens_details[selected_token_id].decimals;
-        string str = format("Your balance - {}.{} {}", left_part, right_part, token_symbol);
-        Terminal.print(0, str);
+
+        string token_symbol = tokens_details[selected_token_id].symbol;
+        string balance_str = toFractional(_balance, tokens_details[selected_token_id].decimals);
+
+//        Terminal.print(0, format("Your token wallet address - {}", token_wallet_address));
+        Terminal.print(0, format("Your balance - {} {}", balance_str, token_symbol));
 
         getAmountToSend();
     }
 
     function success(uint64 res) public {
-        Terminal.print(0, "Your tokens are successfully transfered!");
+        Terminal.print(tvm.functionId(showStartMenu), "Your tokens are successfully transfered!");
     }
 
     // ------------------------------ ERR HANDLERS --------------------------------
+    function onSendFailed(uint32 sdkError, uint32 exitCode) public {
+        Terminal.print(0, format("Send failed. Sdk error = {}, Error code = {}", sdkError, exitCode));
+        ConfirmInput.get(tvm.functionId(submit), "Do you want to retry?");
+    }
 
+    // ------------------------------ UPGRADABLE ----------------------------------
+    function onCodeUpgrade() internal override {}
+
+    // ------------------------------ UTILS ---------------------------------------
+    function toFractional(uint128 balance, uint8 decimals) internal view returns (string) {
+        uint left_part = balance / uint256(10) ** decimals;
+        uint right_part = balance % uint256(10) ** decimals;
+        return format("{}.{}", left_part, right_part);
+    }
+
+    function fromFractional(string value, uint8 decimals) internal returns (uint128, bool) {
+        uint8 sep_id = findSeparator(value, ".");
+
+        uint256 result; bool status;
+        if (sep_id == 0) {
+            // no separator found, integer given
+            (result, status) = stoi(value);
+            if ((status == false) || (result == 0)) {
+                return (0, false);
+            }
+            // add decimals
+            result = result * uint256(10) ** uint256(decimals);
+        } else {
+            // found separator, add decimals to real and int parts and sum them
+            string str_real_part = value.substr(sep_id + 1, value.byteLength() - (sep_id + 1));
+            string str_int_part = value.substr(0, sep_id);
+
+            // sanity checks
+            (uint256 int_part, bool st1) = stoi(str_int_part);
+            (uint256 real_part, bool st2) = stoi(str_real_part);
+
+            if ((st1 == false) || (st2 == false) || ((int_part + real_part) == 0)) {
+                return (0, false);
+            }
+            // convert real part
+            uint256 real_part_with_decimals = parseRealPart(str_real_part);
+
+            result = int_part * uint256(10) ** uint256(decimals) + real_part_with_decimals;
+        }
+        return (uint128(result), true);
+    }
+
+    function findSeparator(string str_num, string sep) internal view returns (uint8 sep_id) {
+        for (uint8 i = 0; i < str_num.byteLength(); i++) {
+            if (str_num.substr(i, 1) == sep) {
+                sep_id = i;
+            }
+        }
+    }
+
+    function parseRealPart(string real_part) internal view returns (uint256) {
+        // lets day we got 1.0012 in token with 6 decimals, so that
+        // real_part -> 0012
+        // decimals  -> 6
+        uint8 decimals = tokens_details[selected_token_id].decimals;
+        uint8 power = uint8(decimals) - real_part.byteLength();
+        (uint256 result, bool st) = stoi(real_part);
+        // result = 12 * 10**2
+        return result * uint256(10) ** uint256(power);
+    }
 }

@@ -1,0 +1,34 @@
+{
+	"ABI version": 2,
+	"header": ["pubkey", "time", "expire"],
+	"functions": [
+		{
+			"name": "constructor",
+			"inputs": [
+				{"name":"_tokens","type":"address[]"}
+			],
+			"outputs": [
+			]
+		},
+		{
+			"name": "setTokens",
+			"inputs": [
+				{"name":"new_tokens","type":"address[]"}
+			],
+			"outputs": [
+			]
+		},
+		{
+			"name": "tokens",
+			"inputs": [
+			],
+			"outputs": [
+				{"name":"tokens","type":"address[]"}
+			]
+		}
+	],
+	"data": [
+	],
+	"events": [
+	]
+}
